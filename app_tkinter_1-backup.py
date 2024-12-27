@@ -4,8 +4,6 @@ from tkinter import ttk, messagebox, filedialog
 import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FormatStrFormatter
 from matplotlib.figure import Figure
 from fpdf import FPDF
 from scipy.optimize import curve_fit
@@ -21,7 +19,6 @@ class JRCurveFitApp:
         self.root.configure(bg='lightgray')
         self.input_filename = ""
         self.output_filename = ""
-        self.fit_params = 0,0
         self.root.protocol("WM_DELETE_WINDOW", self.exit_program)
         menubar = tk.Menu(root)
         file_menu = tk.Menu(menubar, tearoff=0)
@@ -280,7 +277,7 @@ class JRCurveFitApp:
         # Plot Frame
         plot_frame = ttk.Frame(input_frame, width =300)
         plot_frame.grid(row=2, column =2, padx=10, pady=10)
-        self.plot_frame = plot_frame
+
         # Table
         self.table = ttk.Treeview(table_frame, columns=("Delta_a", "J"), show="headings", height=15)
         self.table.heading("Delta_a", text="Δa (in)")
@@ -301,7 +298,7 @@ class JRCurveFitApp:
         self.report_button.grid(row=0, column=2, padx=10)
 
         # Plot
-        self.figure = Figure(figsize=(5, 5), dpi=100)
+        self.figure = Figure(figsize=(5, 4), dpi=100)
         self.plot_axes = self.figure.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.figure, master=plot_frame)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -395,45 +392,10 @@ class JRCurveFitApp:
         pass
 
     def Calculate(self):
-        file_name = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
-        if file_name:
-            try:
-                # data = pd.read_csv(file_name, skiprows=1)
-                data = pd.read_csv(file_name, header=None)
-                data = data.fillna(0)
-                if data.shape[1] != 8:
-                    raise ValueError("The file must contain exactly 8 columns.")
-                self.graph_data = data
-                self.draw_graph()
-            except Exception as e:
-                messagebox.showerror("Invalid File", f"Error: {str(e)}")
-
         self.file_menu.entryconfig("Save Outputs", state=tk.NORMAL)
         self.file_menu.entryconfig("Save Outputs as ...", state=tk.NORMAL)
+        pass
     
-    def draw_graph(self):
-        data = self.graph_data
-        graph_name = data.iloc[0,0]
-        labels = data.iloc[1, 1:-2].values
-        x = data.iloc[3:, 0].values  # First column (Normal Stress)
-        y_columns = data.iloc[3:, 1:-2]  # All other columns except the last one (Max Stress)
-        
-        # fig, ax = plt.subplots(figsize=(6, 4))
-        self.plot_axes.clear()
-        for index, column in enumerate(y_columns.columns):
-            self.plot_axes.plot(np.array(x,dtype=float), np.array(y_columns[column].values, dtype=float), marker='o', label=labels[index])
-        self.plot_axes.plot(np.array(x,dtype=float), np.array(x,dtype=float), color='green', linestyle='--')
-        self.plot_axes.set_title(graph_name)
-        self.plot_axes.set_xlabel("Normal Stress (ksi)")
-        self.plot_axes.set_ylabel("Max Stress (ksi)")
-        format_str = f"%.{0}f"
-        self.plot_axes.xaxis.set_major_formatter(FormatStrFormatter(format_str))
-        self.plot_axes.yaxis.set_major_formatter(FormatStrFormatter(format_str))
-        self.plot_axes.legend()
-        self.plot_axes.grid(True, linestyle='--', linewidth=0.5, color='gray')
-        self.canvas.draw()
-        # canvas.get_tk_widget().grid()
-        
     def update_material(self, *args):
         material_index = self.Materials.index(self.TypeOption.get()) + 1
         if material_index <= 9:
@@ -523,25 +485,25 @@ class JRCurveFitApp:
             if output_filename:
                 self.output_filename = output_filename
             else:
-                return 
+                return False
+        
         self.generate_report()
-        return
+        return True
     
     def save_outputs_as(self):
-        output_filename = filedialog.asksaveasfilename(title="Save into PDF file", filetypes=[("PDF files", "*.pdf")])
-        if output_filename:
-            self.output_filename = output_filename
-        else:
-            return 
-        self.generate_report()
+        pass
 
     def exit_program(self):
         response = messagebox.askyesno("Warning", "Inputs and Outputs will be lost. Are you sure you want to exit without saving?")
         if response:
             self.root.destroy()
         else:
-            self.save_inputs()
-            self.save_outputs()
+            is_saved = self.save_inputs()
+            if not is_saved:
+                return
+            is_saved = self.save_outputs()
+            if not is_saved:
+                return
             self.root.destroy()
 
     def run_analysis(self):
@@ -561,8 +523,8 @@ class JRCurveFitApp:
                     raise ValueError("The file must contain exactly two columns.")
                 self.data.dropna(inplace=True)
                 self.display_data()
-                # self.plot_data_only()
-                # self.fit_button.config(state=tk.NORMAL)
+                self.plot_data_only()
+                self.fit_button.config(state=tk.NORMAL)
             except Exception as e:
                 messagebox.showerror("Invalid File", f"Error: {str(e)}")
 
@@ -592,10 +554,10 @@ class JRCurveFitApp:
             popt, _ = curve_fit(jr_curve, da, j)
             C, m = popt
             
-            # self.result_label.config(text=f"C = {C:.2f}   m = {m:.2f}")
-            # self.plot_data_with_fit(da, j, jr_curve, popt)
+            self.result_label.config(text=f"C = {C:.2f}   m = {m:.2f}")
+            self.plot_data_with_fit(da, j, jr_curve, popt)
             self.fit_params = (C, m)
-            # self.report_button.config(state=tk.NORMAL)
+            self.report_button.config(state=tk.NORMAL)
         except Exception as e:
             messagebox.showerror("Invalid Data", f"Error: {str(e)}")
 
@@ -610,12 +572,9 @@ class JRCurveFitApp:
         self.canvas.draw()
 
     def generate_report(self):
-        file_name = self.output_filename
-        if file_name.endswith(".pdf") or file_name.endswith(".PDF"):
-            pass
-        else:
-            file_name += ".pdf"
-            
+        file_name = filedialog.asksaveasfilename(defaultextension=".pdf",
+                                                 filetypes=[("PDF Files", "*.pdf")],
+                                                 initialfile="report")
         if file_name:
             plot_image_file = "jr_curve_plot.png"
             self.figure.savefig(plot_image_file, bbox_inches="tight", dpi=300)
@@ -634,8 +593,8 @@ class JRCurveFitApp:
             pdf.set_font("Arial", size=12)
             for row_id in self.table.get_children():
                 row = self.table.item(row_id)['values']
-                pdf.cell(40, 10, f"{float(row[0]):.4f}", border=1, align="C")
-                pdf.cell(50, 10, f"{float(row[1]):.4f}", border=1, align="C")
+                pdf.cell(40, 10, f"{row[0]:.4f}", border=1, align="C")
+                pdf.cell(50, 10, f"{row[1]:.4f}", border=1, align="C")
                 pdf.ln()
             pdf.set_font("Arial", style="B", size=14)
             pdf.cell(0, 10, "Curve Fit Results:", ln=True)
@@ -647,7 +606,7 @@ class JRCurveFitApp:
             pdf.ln(10)
             pdf.image(plot_image_file, x=30, w=150)
             pdf.output(file_name)
-            messagebox.showinfo("Report Saved", f"Report has been saved as {file_name}")
+            messagebox.showinfo("Report Saved", f"Report has been saved as '{file_name}'")
 
 class BatchRunDialog(tk.Toplevel):
     def __init__(self, parent):
