@@ -4,7 +4,7 @@ from enum import Enum
 from typing import List
 from jsonschema import validate, ValidationError as SchemaValidationError
 from pydantic import BaseModel, Field, ValidationError, constr, model_validator
-import globals
+# import globals
 
 
 # Define enums
@@ -61,6 +61,7 @@ class Inputs(BaseModel):
 		:param values:
 		:return:
 		"""
+		return values
 		# Ensure all leak_rates > 0
 		leak_rates = values.get("leak_rates", [])
 		if any(rate <= 0 for rate in leak_rates):

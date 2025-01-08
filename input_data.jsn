@@ -1,0 +1,31 @@
+{
+    "input_ver": "1.0",
+    "analysis_title": "Hot Leg SMAW",
+    "nps": 12,
+    "od": 12.0,
+    "pipet": 0.5,
+    "pr_ksi": 2250.0,
+    "temp_f": 600.0,
+    "max_op_stress": 55.0,
+    "num_points": 15,
+    "pts_dist": "BIASED",
+    "leak_rates": [
+        0.05,
+        0.1,
+        0.25,
+        0.5,
+        1.0
+    ],
+    "morph": "FATIGUE",
+    "n90turns": 1,
+    "roughness": 0.1,
+    "mode": "LL",
+    "material": 3,
+    "yield_strength": 30.0,
+    "uts": 60.0,
+    "elas_mod": 28000.0,
+    "ro_alpha": 4.5,
+    "ro_n": 3.5,
+    "c_jr": 1.5,
+    "m_jr": 0.43
+}

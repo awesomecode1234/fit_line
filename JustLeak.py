@@ -12,6 +12,10 @@ from scipy.optimize import curve_fit
 import os
 from datetime import datetime
 import json
+from inputs import Inputs
+from pydantic import ValidationError
+from ro_fit import RO_Fit_Dialog
+from jr_fit import JR_Fit_Dialog
 
 class JRCurveFitApp:
     def __init__(self, root):
@@ -45,7 +49,7 @@ class JRCurveFitApp:
         menubar.add_cascade(label="Batch Run", menu=batchrun_menu)
 
         about_menu = tk.Menu(menubar, tearoff=0)
-        about_menu.add_command(label="About")
+        about_menu.add_command(label="About", command=self.show_about)
         menubar.add_cascade(label="About", menu=about_menu)
 
         root.config(menu=menubar)
@@ -57,7 +61,7 @@ class JRCurveFitApp:
         title_frame = tk.Frame(input_frame)
         title_frame.grid(row =1, column =0, rowspan=1, columnspan=2, sticky="nw",padx=10, pady=5)
         ttk.Label(title_frame, text="Analysis Title:").grid(row=0, column=0, sticky="w", padx=10, pady=2)
-        Analysis_Title = ttk.Entry(title_frame, width=30, justify=tk.RIGHT)
+        Analysis_Title = ttk.Entry(title_frame, width=30, justify=tk.LEFT)
         Analysis_Title.insert(0, "Hot Leg SMAW")
         Analysis_Title.grid(row=0, column=1, padx=5, pady=2)
         self.Analysis_Title = Analysis_Title
@@ -147,17 +151,7 @@ class JRCurveFitApp:
         ttk.Radiobutton(bac_frame, text="Biased", variable=Pts_dist, value="BIASED").grid(row=2, column=1, sticky="w")
         self.Pts_dist = Pts_dist
 
-        Materials = ["1. ASME SA-312 BM/TIG", "2. ASME SA-312, 304 Weld", "3. ASME SA-312, 304L Weld", "4. ASME SA-106 Gr B (Base Metal)", 
-        "5. ASME SA-106 Gr C (Base Metal)", "6. ASME SA-335. Gr P11 (Base Metal)", "7. ASME SA-106 Gr B (Weld Metal)", "8. ASME SA-106 Gr C (Weld Metal)", "9. ASME SA-335. Gr P11 (Weld Metal)",
-        "10. Limit Load", "11. Austenitic C-6330", "12. Ferritic C-6331-1 Cat 1", "13. Ferritic C-6331-1 Cat 2", "14. EPFM (J-Based)"]
         
-        self.Materials = Materials
-        TypeOption= tk.StringVar(root)
-        TypeOption.set(Materials[2])  # default value
-        optionmenu = tk.OptionMenu(first_col, TypeOption, *Materials)
-        optionmenu.grid(row=2, column=0, sticky="w", padx=10, pady=10)
-        TypeOption.trace("w", self.update_material)
-        self.TypeOption = TypeOption
         
         tensile_frame = ttk.LabelFrame(first_col, text="Tensile Properties", padding="10")
 
@@ -219,11 +213,13 @@ class JRCurveFitApp:
     
         ttk.Label(crack_frame, text="45 Degree Turns").grid(row=3, column=0, sticky="w", padx=5, pady=2)
         Degree_Turns = ttk.Entry(crack_frame, width=10, justify=tk.RIGHT)
+        Degree_Turns.insert(0, 1)
         Degree_Turns.grid(row=3, column=1, padx=5, pady=2)
         self.Degree_Turns = Degree_Turns
 
         ttk.Label(crack_frame, text="Roughness").grid(row=4, column=0, sticky="w", padx=5, pady=2)
         Roughness = ttk.Entry(crack_frame, width=10, justify=tk.RIGHT)
+        Roughness.insert(0, 0.1)
         Roughness.grid(row=4, column=1, padx=5, pady=2)
         self.Roughness = Roughness
 
@@ -309,13 +305,42 @@ class JRCurveFitApp:
         # Results Label
         self.result_label = ttk.Label(plot_frame, text="", font=("Arial", 12))
         self.result_label.pack(side=tk.BOTTOM, pady=10)
-        self.update_material()
         self.update_crack_morphology()
+        
+        Materials = ["1. ASME SA-312 BM/TIG", "2. ASME SA-312, 304 Weld", "3. ASME SA-312, 304L Weld", "4. ASME SA-106 Gr B (Base Metal)", 
+        "5. ASME SA-106 Gr C (Base Metal)", "6. ASME SA-335. Gr P11 (Base Metal)", "7. ASME SA-106 Gr B (Weld Metal)", "8. ASME SA-106 Gr C (Weld Metal)", "9. ASME SA-335. Gr P11 (Weld Metal)",
+        "10. Limit Load", "11. Austenitic C-6330", "12. Ferritic C-6331-1 Cat 1", "13. Ferritic C-6331-1 Cat 2", "14. EPFM (J-Based)"]
+        
+        self.Materials = Materials
+
+        try:
+            data = pd.read_csv("MaterialsDB.csv", header=0, dtype={0: str, 1: float, 2: float, 3: float, 4: float, 5: float, 6: float, 7: float})
+            data = data.fillna(0)
+            if data.shape[1] != 8:
+                raise ValueError("The file must contain exactly 8 columns.")
+        
+            Materials = data.iloc[:,0].values.tolist() 
+
+            self.Materials = Materials
+            self.material_datalist = data.iloc[:, 1:].values.tolist()
+        except Exception as e:
+            messagebox.showerror("Invalid File", f"Error: {str(e)}")
+    
+        
+        self.TypeOption= tk.StringVar(root)
+        optionmenu = tk.OptionMenu(first_col, self.TypeOption, *Materials)
+        optionmenu.grid(row=2, column=0, sticky="w", padx=10, pady=10)
+        self.TypeOption.trace("w", self.update_material)
+        self.TypeOption.set(Materials[2])  # default value
+        self.update_material()
+
 
     def load_data(self):
         with open(self.input_filename, "r") as file:
             json_data = json.load(file)  
         self.json_data = json_data
+        self.CrackMorphology.set("USERDEF")
+        self.TypeOption.set(self.Materials[13])
         self.new_analysis()
         self.Analysis_Title.insert(0, json_data["analysis_title"])
         self.Normal_Pipe_Size.insert(0, json_data["nps"])
@@ -332,11 +357,11 @@ class JRCurveFitApp:
         self.GPM_2.insert(0, json_data["leak_rates"][2])
         self.GPM_3.insert(0, json_data["leak_rates"][3])
         self.GPM_4.insert(0, json_data["leak_rates"][4])
-        self.CrackMorphology.set("USERDEF")
+        
         self.Degree_Turns.insert(0, json_data["n90turns"])
         self.Roughness.insert(0, json_data["roughness"])
-        self.TypeOption.set(self.Materials[13])
         self.Yield_Strength.insert(0, json_data["yield_strength"])
+        
         self.UTS.insert(0, json_data["uts"])
         self.Elastic_Modulus.insert(0, json_data["elas_mod"])
         self.RO_Alpha.insert(0, json_data["ro_alpha"])
@@ -345,56 +370,156 @@ class JRCurveFitApp:
         self.Exponent_m.insert(0, json_data["m_jr"])
         self.TypeOption.set(self.Materials[json_data["material"]-1])
         self.CrackMorphology.set(json_data["morph"])
+    
+    def get_json_from_input(self):
+        json_data = {
+            'input_ver': "1.0",  # Example version, adjust as needed
+            'analysis_title': self.Analysis_Title.get(),
+            'nps': int(self.Normal_Pipe_Size.get()),
+            'od': float(self.Pipe_OD.get()),
+            'pipet': float(self.Wall_Thickness.get()),
+            'pr_ksi': float(self.Pressure.get()),
+            'temp_f': float(self.Temperature.get()),
+            'max_op_stress': float(self.Max_Op_Stress.get()),
+            'num_points': int(self.No_Of_Points.get()),
+            'pts_dist': self.Pts_dist.get(),
+            'leak_rates': [
+                float(self.GPM_0.get()),
+                float(self.GPM_1.get()),
+                float(self.GPM_2.get()),
+                float(self.GPM_3.get()),
+                float(self.GPM_4.get()),
+            ],
+            'morph': self.CrackMorphology.get(),
+            'n90turns': int(self.Degree_Turns.get()),
+            'roughness': float(self.Roughness.get()),
+            'mode': "LL",  # Example, update according to input
+            'material': self.Materials.index(self.TypeOption.get()) + 1,
+            'yield_strength': float(self.Yield_Strength.get()),
+            'uts': float(self.UTS.get()),
+            'elas_mod': float(self.Elastic_Modulus.get()),
+            'ro_alpha': float(self.RO_Alpha.get()),
+            'ro_n': float(self.RO_n.get()),
+            'c_jr': float(self.Coef_C_J_R.get()),
+            'm_jr': float(self.Exponent_m.get()),
+        }
+        return json_data
+
     def save_data(self):
-        json_data = {}
-        json_data['analysis_title'] = self.Analysis_Title.get()
-        json_data['nps'] = self.Normal_Pipe_Size.get()
-        json_data['od'] = self.Pipe_OD.get()
-        json_data['pipet'] = self.Wall_Thickness.get()
-        json_data['pr_ksi'] = self.Pressure.get()
-        json_data['temp_f'] = self.Temperature.get()
-        json_data['max_op_stress'] = self.Max_Op_Stress.get()
-        json_data['num_points'] = self.No_Of_Points.get()
-        json_data['pts_dist'] = self.Pts_dist.get()
-        json_data['leak_rates'] = [self.GPM_0.get(), self.GPM_1.get(), self.GPM_2.get(), self.GPM_3.get(), self.GPM_4.get()]
-        json_data['morph'] = self.CrackMorphology.get()
-        json_data['n90turns'] = self.Degree_Turns.get()
-        json_data['roughness'] = self.Roughness.get()
-        json_data['yield_strength'] = self.Yield_Strength.get()
-        json_data['uts'] = self.UTS.get()
-        json_data['elas_mod'] = self.Elastic_Modulus.get()
-        json_data['ro_alpha'] = self.RO_Alpha.get()
-        json_data['ro_n'] = self.RO_n.get()
-        json_data['c_jr'] = self.Coef_C_J_R.get()
-        json_data['m_jr'] = self.Exponent_m.get()
-        json_data['material'] = self.Materials.index(self.TypeOption.get())+1
-        self.json_data = json_data
+        self.json_data = self.get_json_from_input()
         with open(self.input_filename, 'w') as file:
-            json.dump(json_data, file, indent=4)
+            json.dump(self.json_data, file, indent=4)
 
     def Fit_ROCurve_from_Stress_Strain_Data(self):
-        self.import_data()
-        self.fit_curve()
-        self.RO_Alpha.delete(0, tk.END)
-        self.RO_n.delete(0, tk.END)
-        self.RO_Alpha.insert(0, f"{self.fit_params[0]:.2f}")
-        self.RO_n.insert(0, f"{self.fit_params[1]:.2f}")
-        pass
+        dialog = RO_Fit_Dialog(self.root, (self.Yield_Strength.get(), self.Elastic_Modulus.get()))
+        result = dialog.result
+        if result is not None:
+            self.RO_Alpha.delete(0, tk.END)
+            self.RO_n.delete(0, tk.END)
+            self.fit_params = result
+            self.RO_Alpha.insert(0, f"{self.fit_params[0]:.2f}")
+            self.RO_n.insert(0, f"{self.fit_params[1]:.2f}")
 
     def Fit_ROCurve_from_YS_UTS(self):
         pass
 
 
     def Fit_JRCurve_from_Data(self):
-        self.import_data()
-        self.fit_curve()
-        self.Coef_C_J_R.delete(0, tk.END)
-        self.Exponent_m.delete(0, tk.END)
-        self.Coef_C_J_R.insert(0, f"{self.fit_params[0]:.2f}")
-        self.Exponent_m.insert(0, f"{self.fit_params[1]:.2f}")
-        pass
+        dialog = JR_Fit_Dialog(self.root)
+        result = dialog.result
+        if result is not None:
+            self.fit_params = result
+            self.Coef_C_J_R.delete(0, tk.END)
+            self.Exponent_m.delete(0, tk.END)
+            self.Coef_C_J_R.insert(0, f"{self.fit_params[0]:.2f}")
+            self.Exponent_m.insert(0, f"{self.fit_params[1]:.2f}")
+        
+    def Validate_inputs(self):
+        try:
+            json_data = self.get_json_from_input()
+            validated_data = Inputs(**json_data)
+            leak_rates = json_data.get("leak_rates", [])
+            flag = False
+            for rate in leak_rates:
+                if rate <= 0:
+                    flag = True
+                    break
+            if flag:
+                messagebox.showerror("Input Validation Error", "All values in leak_rates must be greater than 0.")
+                return False
+            od = json_data.get("od", 0)
+            pipet = json_data.get("pipet", 0)
+            rm_t = 0.5 * (od - pipet)
+            if rm_t < 2:
+                messagebox.showerror("Input Validation Error", f"Rm/t (calculated as 0.5 * (od - pipet)) must be >= 2. Current value: {rm_t:.2f}")    
+                return False
+            else:
+                return True
+        except ValidationError as e:
+            errormsg = ""
+            for error in e.errors():
+                loc = error.get("loc", [])
+                field = loc[0] if loc else "Unknown"
+                if field ==  "pr_ksi":
+                    errormsg += "Pressure (ksi) should be greater than 0"
+                    continue
+                elif field ==  "nps":
+                    errormsg += "Normal Pipe Size (in) should be greater than 0 and less than 100"
+                    continue
+                elif field ==  "od":
+                    errormsg += "Pipe OD (in) should be greater than 0 and less than 100"
+                    continue
+                elif field ==  "pipet":
+                    errormsg += "Wall Thickness (in) should be greater than 0 and less than 100"
+                    continue            
+                elif field ==  "temp_f":
+                    errormsg += "Temperature (F) should be greater than 0"
+                    continue
+                elif field ==  "max_op_stress":
+                    errormsg += "Maximum Operating Stress (ksi) should be greater than 0"
+                    continue
+                elif field ==  "num_points":
+                    errormsg += "Number of Points should be greater than 0"
+                    continue
+                elif field ==  "n90turns":
+                    errormsg += "Number of 45-degree Turns should be greater than 0"
+                    continue
+                elif field ==  "roughness":
+                    errormsg += "Roughness should be greater than 0"
+                    continue
+                elif field ==  "yield_strength":
+                    errormsg += "Yield Strength (ksi) should be greater than 0"
+                    continue
+                elif field ==  "uts":
+                    errormsg += "UTS (ksi) should be greater than 0"
+                    continue
+                elif field ==  "elas_mod":
+                    errormsg += "Elastic Modulus (ksi) should be greater than 0"
+                    continue
+                elif field ==  "ro_alpha":
+                    errormsg += "RO Alpha should be greater than 0"
+                    continue
+                elif field ==  "ro_n":
+                    errormsg += "RO N should be greater than 0"
+                    continue
+                elif field ==  "c_jr":
+                    errormsg += "Coefficient C(-1/R) should be greater than 0"
+                    continue
+                elif field ==  "m_jr":
+                    errormsg += "Exponent M should be greater than 0"
+                    continue        
+            
+            messagebox.showerror("Input Validation Error", errormsg)
+            return False
+
+        
 
     def Calculate(self):
+        if not self.Validate_inputs():
+            return None
+        save_result = self.save_inputs()
+        if not save_result:
+            return None
         file_name = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
         if file_name:
             try:
@@ -407,7 +532,7 @@ class JRCurveFitApp:
                 self.draw_graph()
             except Exception as e:
                 messagebox.showerror("Invalid File", f"Error: {str(e)}")
-
+        
         self.file_menu.entryconfig("Save Outputs", state=tk.NORMAL)
         self.file_menu.entryconfig("Save Outputs as ...", state=tk.NORMAL)
     
@@ -435,12 +560,37 @@ class JRCurveFitApp:
         # canvas.get_tk_widget().grid()
         
     def update_material(self, *args):
-        material_index = self.Materials.index(self.TypeOption.get()) + 1
-        if material_index <= 9:
+        material_index = self.Materials.index(self.TypeOption.get())
+        if material_index < 9:
             newState = tk.DISABLED
         else:
             newState = tk.NORMAL
         
+        if hasattr(self, 'material_datalist'):
+
+            self.Yield_Strength.config(state = tk.NORMAL)
+            self.UTS.config(state = tk.NORMAL)
+            self.Elastic_Modulus.config(state = tk.NORMAL)
+            self.RO_Alpha.config(state = tk.NORMAL)
+            self.RO_n.config(state = tk.NORMAL)
+            self.Coef_C_J_R.config(state = tk.NORMAL)
+            self.Exponent_m.config(state = tk.NORMAL)
+            self.Yield_Strength.delete(0, tk.END)
+            self.Yield_Strength.insert(0, self.material_datalist[material_index][0])
+            self.UTS.delete(0, tk.END)
+            self.UTS.insert(0, self.material_datalist[material_index][1])
+            self.Elastic_Modulus.delete(0, tk.END)
+            self.Elastic_Modulus.insert(0, self.material_datalist[material_index][2])
+            self.RO_Alpha.delete(0, tk.END)
+            self.RO_Alpha.insert(0, self.material_datalist[material_index][3])
+            self.RO_n.delete(0, tk.END)
+            self.RO_n.insert(0, self.material_datalist[material_index][4])
+            self.Coef_C_J_R.delete(0, tk.END)
+            self.Coef_C_J_R.insert(0, self.material_datalist[material_index][5])
+            self.Exponent_m.config(state = tk.NORMAL)
+            self.Exponent_m.delete(0, tk.END)
+            self.Exponent_m.insert(0, self.material_datalist[material_index][6])
+
         if material_index == 13:
             self.Coef_C_J_R.config(state = tk.NORMAL)
             self.Exponent_m.config(state = tk.NORMAL)
@@ -501,7 +651,7 @@ class JRCurveFitApp:
     
     def save_inputs(self):
         if self.input_filename == "":
-            input_filename = filedialog.asksaveasfilename(title="Save into JSON file", filetypes=[("JSON files", "*.json, *.jsn")])
+            input_filename = filedialog.asksaveasfilename(title="Save into JSON file", defaultextension=".jsn", filetypes=[("JSON files", "*.json, *.jsn")], initialfile="input_data")
             if input_filename:
                 self.input_filename = input_filename
             else:
@@ -510,7 +660,7 @@ class JRCurveFitApp:
         return True
 
     def save_inputs_as(self):
-        input_filename = filedialog.asksaveasfilename(title="Save as new JSON file", filetypes=[("JSON files", "*.json, *.jsn")])
+        input_filename = filedialog.asksaveasfilename(title="Save into JSON file", defaultextension=".jsn", filetypes=[("JSON files", "*.json, *.jsn")], initialfile="input_data")
         if input_filename:
             self.input_filename = input_filename
         else:
@@ -519,7 +669,7 @@ class JRCurveFitApp:
 
     def save_outputs(self):
         if self.output_filename == "":
-            output_filename = filedialog.asksaveasfilename(title="Save into PDF file", filetypes=[("PDF files", "*.pdf")])
+            output_filename = filedialog.asksaveasfilename(title="Save into PDF file", defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")], initialfile="report")
             if output_filename:
                 self.output_filename = output_filename
             else:
@@ -528,7 +678,7 @@ class JRCurveFitApp:
         return
     
     def save_outputs_as(self):
-        output_filename = filedialog.asksaveasfilename(title="Save into PDF file", filetypes=[("PDF files", "*.pdf")])
+        output_filename = filedialog.asksaveasfilename(title="Save into PDF file", defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")], initialfile="report")
         if output_filename:
             self.output_filename = output_filename
         else:
@@ -648,7 +798,9 @@ class JRCurveFitApp:
             pdf.image(plot_image_file, x=30, w=150)
             pdf.output(file_name)
             messagebox.showinfo("Report Saved", f"Report has been saved as {file_name}")
-
+    
+    def show_about(self):
+        messagebox.showinfo("About XYZ", "This software is licensed to XYZ Co.")
 class BatchRunDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)

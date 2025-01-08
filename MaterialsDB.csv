@@ -1,0 +1,15 @@
+Material,YS (ksi),UTS (ksi),E (ksi),RO-alpha,RO-n,C (J-R),m (J-R)
+1. ASME SA-312 BM/TIG,30,75,28300,2.882,3.783,1,1
+"2. ASME SA-312, 304 Weld",30,75,28300,2.882,3.783,1,1
+"3. ASME SA-312, 304L Weld",25,70,28300,3.259,3.505,1,1
+4. ASME SA-106 Gr B (Base Metal),35,60,29400,2.676,5.602,1,1
+5. ASME SA-106 Gr C (Base Metal),40,70,29200,2.456,5.379,1,1
+6. ASME SA-335. Gr P11 (Base Metal),30,60,29600,2.969,4.711,1,1
+7. ASME SA-106 Gr B (Weld Metal),35,60,29400,2.676,5.602,1,1
+8. ASME SA-106 Gr C (Weld Metal),40,70,29200,2.456,5.379,1,1
+9. ASME SA-335. Gr P11 (Weld Metal),30,60,29600,2.969,4.711,1,1
+10. Limit Load,1,1,1,1,1,1,1
+11. Austenitic C-6330,1,1,1,1,1,1,1
+12. Ferritic C-6331-1 Cat 1,1,1,1,1,1,1,1
+13. Ferritic C-6331-1 Cat 2,1,1,1,1,1,1,1
+14. EPFM (J-Based),1,1,1,1,1,1,1

@@ -622,9 +622,9 @@ class BatchRunDialog(tk.Toplevel):
         self.wait_window(self)
 
     def setup_ui(self):
-        self.title("Batch Run")
-        self.geometry("400x600")
-
+        self.title("Ramberg-Osgood Fit")
+        self.geometry("1080x700")
+        
         # Listbox to display files
         self.listbox = tk.Listbox(self, selectmode=tk.MULTIPLE)
         self.listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
